@@ -79,6 +79,9 @@ function ensureEnvFile() {
 function loadConfigFromEnv() {
   // getEffectiveDataConfig 已经把 DOCKER_ONLY_KEYS 从环境变量注入进来了
   const flat = getEffectiveDataConfig();
+  
+  // 调试日志：检查 flat 中的 IMAGE_BASE_URL 值
+  log.info(`[DEBUG config] flat.IMAGE_BASE_URL = "${flat.IMAGE_BASE_URL}"`);
 
   const config = {
     server: {
@@ -230,9 +233,14 @@ ensureEnvFile();
 dotenv.config();
 
 let config = loadConfigFromEnv();
+// 为调试添加标识
+config._debugId = `config-${Date.now()}`;
+log.info(`[DEBUG config] 初始化 config 对象, _debugId = ${config._debugId}, imageBaseUrl = "${config.imageBaseUrl}"`);
 
 export function reloadConfigFromEnv() {
   config = loadConfigFromEnv();
+  config._debugId = `config-${Date.now()}`;
+  log.info(`[DEBUG config] 重新加载后 config 对象, _debugId = ${config._debugId}, imageBaseUrl = "${config.imageBaseUrl}"`);
   log.info('✓ 配置已重新加载');
   return config;
 }

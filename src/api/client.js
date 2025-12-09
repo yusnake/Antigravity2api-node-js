@@ -1,10 +1,11 @@
 import axios from 'axios';
 import tokenManager from '../auth/token_manager.js';
 import config from '../config/config.js';
+import { log } from '../utils/logger.js';
 import { generateRequestId, generateToolCallId } from '../utils/idGenerator.js';
 import AntigravityRequester from '../AntigravityRequester.js';
 import { saveBase64Image } from '../utils/imageStorage.js';
-import { registerThoughtSignature } from '../utils/utils.js';
+import { registerTextThoughtSignature, registerThoughtSignature } from '../utils/utils.js';
 
 // 请求客户端：优先使用 AntigravityRequester，失败则降级到 axios
 let requester = null;
@@ -205,14 +206,27 @@ function detectEmbeddedError(body) {
 
     try {
         const parsed = typeof body === 'string' ? JSON.parse(body) : body;
-        if (!parsed?.error) return null;
+        
+        // 支持两种格式：
+        // 1. { "error": { "code": 429, ... } } - 标准格式
+        // 2. { "code": 429, "status": "RESOURCE_EXHAUSTED", ... } - 直接格式
+        let errorObj = null;
+        
+        if (parsed?.error) {
+            errorObj = parsed.error;
+        } else if (parsed?.code || parsed?.status) {
+            // 直接格式：{ "code": 429, "status": "RESOURCE_EXHAUSTED", "message": "..." }
+            errorObj = parsed;
+        }
+        
+        if (!errorObj) return null;
 
-        const status = statusFromStatusText(parsed.error.code || parsed.error.status);
-        const retryDelayMs = parseRetryDelayMs(parsed.error, parsed.error.message || body);
+        const status = statusFromStatusText(errorObj.code || errorObj.status);
+        const retryDelayMs = parseRetryDelayMs(errorObj, errorObj.message || body);
 
         return {
             status,
-            message: JSON.stringify(parsed.error, null, 2),
+            message: JSON.stringify(errorObj, null, 2),
             retryDelayMs,
             disableToken: status === 401
         };
@@ -261,34 +275,82 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function withRetry(operation, token) {
-    const maxAttempts = Math.max(config.retry?.maxAttempts || 1, 1);
+async function withRetry(operationFactory, initialToken) {
+    const maxTokenSwitches = Math.max(config.retry?.maxAttempts || 3, 1);
     const retryStatusCodes = config.retry?.statusCodes?.length
         ? config.retry.statusCodes
         : [429, 500];
+    const maxAttemptsPerToken = 2; // 每个token最多尝试2次（首次 + 1次重试）
 
-    let attempt = 0;
-    while (attempt < maxAttempts) {
+    let currentToken = initialToken;
+    let tokenAttempts = 0; // 当前token的尝试次数
+    let tokenSwitches = 0; // 已切换token的次数
+    const triedTokenIds = new Set([currentToken.access_token]);
+    let lastError = null;
+
+    log.info(`[withRetry] 开始请求，maxTokenSwitches=${maxTokenSwitches}, retryStatusCodes=${retryStatusCodes.join(',')}`);
+
+    while (tokenSwitches < maxTokenSwitches) {
         try {
-            return await operation();
+            return await operationFactory(currentToken);
         } catch (error) {
+            lastError = error;
             const details = await extractErrorDetails(error);
 
+            log.warn(`[withRetry] 请求失败，status=${details.status}, tokenAttempts=${tokenAttempts}, tokenSwitches=${tokenSwitches}`);
+
             if (details.disableToken || details.status === 401) {
-                tokenManager.disableCurrentToken(token);
+                log.warn(`[withRetry] Token需要禁用 (status=${details.status}, disableToken=${details.disableToken})`);
+                tokenManager.disableCurrentToken(currentToken);
                 throw error;
             }
 
+            const is429 = details.status === 429;
             const shouldRetry = retryStatusCodes.includes(details.status);
-            if (!shouldRetry || attempt === maxAttempts - 1) {
+
+            log.info(`[withRetry] is429=${is429}, shouldRetry=${shouldRetry}`);
+
+            if (!shouldRetry) {
+                log.warn(`[withRetry] 状态码 ${details.status} 不在重试列表中，直接抛出错误`);
                 throw error;
             }
 
-            const delayMs = details.retryDelayMs ?? Math.min(1000 * (attempt + 1), 5000);
+            tokenAttempts += 1;
+
+            // 429错误：当前token已重试1次后，切换到下一个token
+            if (is429 && tokenAttempts >= maxAttemptsPerToken) {
+                log.info(`[withRetry] 429错误，当前token已重试${tokenAttempts}次，尝试切换到下一个token...`);
+                tokenManager.moveToNextToken();
+                const nextToken = await tokenManager.getToken();
+
+                if (!nextToken) {
+                    log.warn('[withRetry] 没有可用的token了');
+                    throw error;
+                }
+
+                // 检查是否已经尝试过这个token（避免循环）
+                if (triedTokenIds.has(nextToken.access_token)) {
+                    log.warn('[withRetry] 所有token都已尝试过，仍然失败');
+                    throw error;
+                }
+
+                triedTokenIds.add(nextToken.access_token);
+                currentToken = nextToken;
+                tokenAttempts = 0;
+                tokenSwitches += 1;
+                log.info(`[withRetry] 已切换到新token (第${tokenSwitches}次切换)`);
+                continue;
+            }
+
+            // 其他可重试错误或429首次重试：等待后重试
+            const delayMs = details.retryDelayMs ?? Math.min(1000 * tokenAttempts, 5000);
+            log.info(`[withRetry] ${details.status}错误，等待${delayMs}ms后重试 (当前token第${tokenAttempts + 1}次尝试)`);
             await delay(delayMs);
-            attempt += 1;
         }
     }
+
+    log.error('[withRetry] 所有token都已尝试，仍然失败');
+    throw lastError || new Error('所有token都已尝试，仍然失败');
 }
 
 // 统一错误处理
@@ -345,6 +407,15 @@ function toOpenAiUsage(usageMetadata) {
     };
 }
 
+function flushTextAccumulator(state) {
+    if (!state?.textAccumulator) return;
+    const { text, signature } = state.textAccumulator;
+    if (text && signature) {
+        registerTextThoughtSignature(text, signature);
+    }
+    state.textAccumulator = { text: '', signature: null };
+}
+
 function parseAndEmitStreamChunk(line, state, callback) {
     if (!line.startsWith('data: ')) return;
 
@@ -362,6 +433,11 @@ function parseAndEmitStreamChunk(line, state, callback) {
                     // 思维链内容 - 不添加标签，直接发送
                     callback({ type: 'thinking', content: part.text || '' });
                 } else if (part.text !== undefined) {
+                    if (part.thoughtSignature) {
+                        registerTextThoughtSignature(part.text, part.thoughtSignature);
+                        state.textAccumulator.signature = part.thoughtSignature;
+                    }
+                    state.textAccumulator.text += part.text || '';
                     callback({ type: 'text', content: part.text });
                 } else if (part.functionCall) {
                     // 工具调用
@@ -371,9 +447,12 @@ function parseAndEmitStreamChunk(line, state, callback) {
         }
 
         // 响应结束时发送工具调用
-        if (data.response?.candidates?.[0]?.finishReason && state.toolCalls.length > 0) {
-            callback({ type: 'tool_calls', tool_calls: state.toolCalls });
-            state.toolCalls = [];
+        if (data.response?.candidates?.[0]?.finishReason) {
+            flushTextAccumulator(state);
+            if (state.toolCalls.length > 0) {
+                callback({ type: 'tool_calls', tool_calls: state.toolCalls });
+                state.toolCalls = [];
+            }
         }
     } catch (e) {
         // 忽略 JSON 解析错误
@@ -384,8 +463,7 @@ function parseAndEmitStreamChunk(line, state, callback) {
 
 export async function generateAssistantResponse(requestBody, token, callback) {
 
-    const headers = buildHeaders(token);
-    const state = { toolCalls: [], usage: null };
+    const state = { toolCalls: [], usage: null, textAccumulator: { text: '', signature: null } };
     let buffer = ''; // 缓冲区：处理跨 chunk 的不完整行
 
     const processChunk = (chunk) => {
@@ -396,7 +474,10 @@ export async function generateAssistantResponse(requestBody, token, callback) {
     };
 
     try {
-        await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+        await withRequesterFallback(async currentUseAxios => withRetry(async (currentToken) => {
+            const headers = buildHeaders(currentToken);
+            buffer = ''; // 重置缓冲区以防重试
+
             if (currentUseAxios) {
                 const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, requestBody), responseType: 'stream' };
                 const response = await axios(axiosConfig);
@@ -432,10 +513,10 @@ export async function getAvailableModels() {
     const token = await tokenManager.getToken();
     if (!token) throw new Error('没有可用的token，请运行 npm run login 获取token');
 
-    const headers = buildHeaders(token);
-
     try {
-        const data = await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+        const data = await withRequesterFallback(async currentUseAxios => withRetry(async (currentToken) => {
+            const headers = buildHeaders(currentToken);
+
             if (currentUseAxios) {
                 return (await axios(buildAxiosConfig(config.api.modelsUrl, headers, {}))).data;
             }
@@ -472,11 +553,14 @@ export async function getAvailableModels() {
 
 export async function generateAssistantResponseNoStream(requestBody, token) {
 
-    const headers = buildHeaders(token);
     let data;
+    let aggregatedText = '';
+    let aggregatedTextSignature = null;
 
     try {
-        data = await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+        data = await withRequesterFallback(async currentUseAxios => withRetry(async (currentToken) => {
+            const headers = buildHeaders(currentToken);
+
             if (currentUseAxios) {
                 return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, requestBody))).data;
             }
@@ -512,6 +596,11 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
         if (part.thought === true) {
             thinkingContent += part.text || '';
         } else if (part.text !== undefined) {
+            if (part.thoughtSignature) {
+                registerTextThoughtSignature(part.text, part.thoughtSignature);
+                aggregatedTextSignature = part.thoughtSignature;
+            }
+            aggregatedText += part.text || '';
             content += part.text;
         } else if (part.functionCall) {
             toolCalls.push(convertToToolCallWithSignature(part.functionCall, part.thoughtSignature));
@@ -525,6 +614,9 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
     // 拼接思维链标签
     if (thinkingContent) {
         content = `<think>\n${thinkingContent}\n</think>\n${content}`;
+    }
+    if (aggregatedText && aggregatedTextSignature) {
+        registerTextThoughtSignature(aggregatedText, aggregatedTextSignature);
     }
 
     // 生图模型：转换为 markdown 格式
@@ -542,11 +634,12 @@ export function closeRequester() {
 }
 
 export async function streamGeminiContent(model, requestBody, token, onChunk) {
-    const headers = buildHeaders(token);
-    const payload = buildGeminiRequest(model, requestBody, token);
 
     try {
-        await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+        await withRequesterFallback(async currentUseAxios => withRetry(async (currentToken) => {
+            const headers = buildHeaders(currentToken);
+            const payload = buildGeminiRequest(model, requestBody, currentToken);
+
             if (currentUseAxios) {
                 const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, payload), responseType: 'stream' };
                 const response = await axios(axiosConfig);
@@ -582,11 +675,12 @@ export async function streamGeminiContent(model, requestBody, token, onChunk) {
 }
 
 export async function generateGeminiContent(model, requestBody, token) {
-    const headers = buildHeaders(token);
-    const payload = buildGeminiRequest(model, requestBody, token);
 
     try {
-        return await withRequesterFallback(async currentUseAxios => withRetry(async () => {
+        return await withRequesterFallback(async currentUseAxios => withRetry(async (currentToken) => {
+            const headers = buildHeaders(currentToken);
+            const payload = buildGeminiRequest(model, requestBody, currentToken);
+
             if (currentUseAxios) {
                 return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, payload))).data;
             }

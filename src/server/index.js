@@ -337,13 +337,6 @@ const SETTINGS_DEFINITIONS = [
     valueResolver: cfg => cfg.systemInstruction
   },
   {
-    key: 'CREDENTIAL_MAX_USAGE_PER_HOUR',
-    label: '凭证每小时调用上限',
-    category: '限额与重试',
-    defaultValue: 20,
-    valueResolver: cfg => cfg.credentials.maxUsagePerHour
-  },
-  {
     key: 'RETRY_STATUS_CODES',
     label: '重试状态码',
     category: '限额与重试',
@@ -1337,6 +1330,11 @@ app.get('/admin/tokens/:index/quotas', requirePanelAuthApi, async (req, res) => 
 
     // 使用refreshToken作为缓存键
     const quotas = await quotaManager.getQuotas(target.refresh_token, target);
+
+    // 禁止浏览器缓存额度结果，确保每次查询直连谷歌
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 
     res.json({ success: true, data: quotas });
   } catch (e) {

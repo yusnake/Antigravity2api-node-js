@@ -3,9 +3,10 @@ import tokenManager from '../auth/token_manager.js';
 import { generateRequestId } from './idGenerator.js';
 import os from 'os';
 
-// 全局思维签名缓存：用于记录 Gemini 返回的 thoughtSignature，
-// 并在后续带 tool_calls 的请求中复用，避免后端报缺失错误。
+// 全局思维签名缓存：用于记录 Gemini 返回的 thoughtSignature（工具调用与文本），
+// 并在后续请求中复用，避免后端报缺失错误。
 const thoughtSignatureMap = new Map();
+const textThoughtSignatureMap = new Map();
 
 function registerThoughtSignature(id, thoughtSignature) {
   if (!id || !thoughtSignature) return;
@@ -15,6 +16,46 @@ function registerThoughtSignature(id, thoughtSignature) {
 function getThoughtSignature(id) {
   if (!id) return undefined;
   return thoughtSignatureMap.get(id);
+}
+
+function normalizeTextForSignature(text) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/!\[[^\]]*]\([^)]+\)/g, '')
+    .replace(/\r\n/g, '\n')
+    .trim();
+}
+
+function registerTextThoughtSignature(text, thoughtSignature) {
+  if (!text || !thoughtSignature) return;
+  const originalText = typeof text === 'string' ? text : String(text);
+  const trimmed = originalText.trim();
+  const normalized = normalizeTextForSignature(trimmed);
+  const payload = { signature: thoughtSignature, text: originalText };
+  if (originalText) {
+    textThoughtSignatureMap.set(originalText, payload);
+  }
+  if (normalized) {
+    textThoughtSignatureMap.set(normalized, payload);
+  }
+  if (trimmed && trimmed !== normalized) {
+    textThoughtSignatureMap.set(trimmed, payload);
+  }
+}
+
+function getTextThoughtSignature(text) {
+  if (typeof text !== 'string' || !text.trim()) return undefined;
+  if (textThoughtSignatureMap.has(text)) {
+    return textThoughtSignatureMap.get(text);
+  }
+  const trimmed = text.trim();
+  if (textThoughtSignatureMap.has(trimmed)) {
+    return textThoughtSignatureMap.get(trimmed);
+  }
+  const normalized = normalizeTextForSignature(trimmed);
+  if (!normalized) return undefined;
+  return textThoughtSignatureMap.get(normalized);
 }
 
 function extractImagesFromContent(content) {
@@ -64,9 +105,10 @@ function handleUserMessage(extracted, antigravityMessages) {
     ]
   })
 }
-function handleAssistantMessage(message, antigravityMessages) {
+function handleAssistantMessage(message, antigravityMessages, modelName) {
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
   const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
+  const allowThoughtSignature = typeof modelName === 'string' && modelName.includes('gemini-3');
 
   // 处理 content 可能是数组的情况
   let contentText = '';
@@ -119,7 +161,18 @@ function handleAssistantMessage(message, antigravityMessages) {
     lastMessage.parts.push(...antigravityTools);
   } else {
     const parts = [];
-    if (hasContent) parts.push({ text: contentText });
+    if (hasContent) {
+      const textThoughtSignature = allowThoughtSignature ? getTextThoughtSignature(contentText) : undefined;
+      if (allowThoughtSignature && !textThoughtSignature) {
+        console.warn('缺失 Gemini 思维签名，跳过该 assistant 文本以避免请求报错');
+      } else {
+        const textPart = { text: textThoughtSignature?.text ?? contentText };
+        if (textThoughtSignature?.signature) {
+          textPart.thoughtSignature = textThoughtSignature.signature;
+        }
+        parts.push(textPart);
+      }
+    }
     parts.push(...antigravityTools);
 
     antigravityMessages.push({
@@ -176,14 +229,14 @@ function handleToolCall(message, antigravityMessages) {
     });
   }
 }
-function openaiMessageToAntigravity(openaiMessages) {
+function openaiMessageToAntigravity(openaiMessages, modelName) {
   const antigravityMessages = [];
   for (const message of openaiMessages) {
     if (message.role === "user" || message.role === "system") {
       const extracted = extractImagesFromContent(message.content);
       handleUserMessage(extracted, antigravityMessages);
     } else if (message.role === "assistant") {
-      handleAssistantMessage(message, antigravityMessages);
+      handleAssistantMessage(message, antigravityMessages, modelName);
     } else if (message.role === "tool") {
       handleToolCall(message, antigravityMessages);
     }
@@ -359,7 +412,7 @@ function generateRequestBody(openaiMessages, modelName, parameters, openaiTools,
     !(actualModelName.includes('claude') && hasAssistantToolCalls);
 
   // 先将 OpenAI 风格 messages 转换为 Antigravity/Gemini contents
-  const contents = openaiMessageToAntigravity(openaiMessages);
+  const contents = openaiMessageToAntigravity(openaiMessages, actualModelName);
 
   // 对 Claude 系列模型：当前不支持 thoughtSignature 字段，需剔除
   if (actualModelName.includes('claude')) {
@@ -418,5 +471,7 @@ export {
   getDefaultIp,
   cleanJsonSchema,
   registerThoughtSignature,
+  registerTextThoughtSignature,
+  getTextThoughtSignature,
   getThoughtSignature
 }

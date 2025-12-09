@@ -270,26 +270,24 @@ function bindAccountActions() {
       if (idx === undefined) return;
 
       const quotaSection = document.getElementById(`quota-${idx}`);
-      const isVisible = quotaSection.style.display !== 'none';
+      if (!quotaSection) return;
 
-      if (isVisible) {
-        quotaSection.style.display = 'none';
-        btn.textContent = '📊 查看额度';
-      } else {
-        quotaSection.style.display = 'block';
-        btn.textContent = '📊 收起额度';
-        await loadQuota(idx);
-      }
+      quotaSection.style.display = 'block';
+      btn.textContent = '📊 刷新额度';
+      await loadQuota(idx, true);
     });
   });
 }
 
-async function loadQuota(accountIndex) {
+async function loadQuota(accountIndex, showLoading = false) {
   const quotaSection = document.getElementById(`quota-${accountIndex}`);
   if (!quotaSection) return;
 
   try {
-    const data = await fetchJson(`/admin/tokens/${accountIndex}/quotas`);
+    if (showLoading) {
+      quotaSection.innerHTML = '<div class="quota-loading">加载中...</div>';
+    }
+    const data = await fetchJson(`/admin/tokens/${accountIndex}/quotas`, { cache: 'no-store' });
     renderQuota(quotaSection, data.data);
   } catch (e) {
     quotaSection.innerHTML = `<div class="quota-error">加载失败: ${e.message}</div>`;
