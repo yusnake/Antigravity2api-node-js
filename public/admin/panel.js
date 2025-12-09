@@ -305,29 +305,151 @@ function renderQuota(container, quotaData) {
   const lastUpdated = quotaData.lastUpdated ?
     new Date(quotaData.lastUpdated).toLocaleString() : '未知时间';
 
+  // 模型分组配置
+  const modelGroups = {
+    'Claude/GPT': {
+      models: ['claude-sonnet-4-5-thinking', 'claude-opus-4-5-thinking', 'claude-sonnet-4-5', 'gpt-oss-120b-medium'],
+      icon: '🧠',
+      description: 'Claude和GPT模型共享额度'
+    },
+    'Tab补全': {
+      models: ['chat_23310', 'chat_20706'],
+      icon: '📝',
+      description: 'Tab补全模型'
+    },
+    '🍌香蕉绘图': {
+      models: ['gemini-2.5-flash-image'],
+      icon: '🍌',
+      description: 'Gemini图像生成模型'
+    },
+    '香蕉Pro': {
+      models: ['gemini-3-pro-image'],
+      icon: '🌟',
+      description: 'Gemini Pro图像生成模型'
+    },
+    'Gemini其他': {
+      models: ['gemini-3-pro-high', 'rev19-uic3-1p', 'gemini-2.5-flash', 'gemini-3-pro-low', 'gemini-2.5-flash-thinking', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'],
+      icon: '💎',
+      description: '其他Gemini模型共享额度'
+    }
+  };
+
+  // 对模型进行分组
+  const groupedModels = {};
+  const otherModels = [];
+
+  // 初始化分组
+  Object.keys(modelGroups).forEach(groupName => {
+    groupedModels[groupName] = {
+      ...modelGroups[groupName],
+      modelIds: [],
+      remaining: [],
+      resetTime: null
+    };
+  });
+
+  // 将模型分配到对应分组
+  for (const [modelName, modelInfo] of Object.entries(quotaData.models)) {
+    let assigned = false;
+
+    for (const [groupName, groupConfig] of Object.entries(modelGroups)) {
+      if (groupConfig.models.includes(modelName)) {
+        groupedModels[groupName].modelIds.push(modelName);
+        groupedModels[groupName].remaining.push(modelInfo.remaining);
+        if (!groupedModels[groupName].resetTime) {
+          groupedModels[groupName].resetTime = modelInfo.resetTime;
+        }
+        assigned = true;
+        break;
+      }
+    }
+
+    if (!assigned) {
+      otherModels.push({
+        name: modelName,
+        remaining: modelInfo.remaining,
+        resetTime: modelInfo.resetTime
+      });
+    }
+  }
+
   let html = `
     <div class="quota-header">
-      <span class="quota-title">模型额度信息</span>
+      <span class="quota-title">模型额度信息（分组显示）</span>
       <span class="quota-updated">更新时间: ${lastUpdated}</span>
     </div>
-    <div class="quota-models">
+    <div class="quota-groups">
   `;
 
-  for (const [modelName, modelInfo] of Object.entries(quotaData.models)) {
-    const remaining = Math.round(modelInfo.remaining * 100);
-    const resetTime = modelInfo.resetTime || '未知时间';
-    const colorClass = remaining > 50 ? 'quota-high' :
-                      remaining > 20 ? 'quota-medium' : 'quota-low';
+  // 渲染分组模型
+  for (const [groupName, groupData] of Object.entries(groupedModels)) {
+    if (groupData.modelIds.length === 0) continue;
+
+    // 计算平均剩余额度
+    const avgRemaining = groupData.remaining.length > 0
+      ? groupData.remaining.reduce((a, b) => a + b, 0) / groupData.remaining.length
+      : 0;
+    const remainingPercentage = Math.round(avgRemaining * 100);
+    const resetTime = groupData.resetTime || '未知时间';
+    const colorClass = remainingPercentage > 50 ? 'quota-high' :
+                      remainingPercentage > 20 ? 'quota-medium' : 'quota-low';
 
     html += `
-      <div class="quota-model-item">
-        <div class="quota-model-name">${escapeHtml(modelName)}</div>
-        <div class="quota-progress-bar">
-          <div class="quota-progress-fill ${colorClass}" style="width: ${remaining}%"></div>
+      <div class="quota-group-item">
+        <div class="quota-group-header">
+          <span class="quota-group-icon">${groupData.icon}</span>
+          <div class="quota-group-info">
+            <div class="quota-group-name">${escapeHtml(groupName)}</div>
+            <div class="quota-group-models">(${groupData.modelIds.map(id => escapeHtml(id)).join(', ')})</div>
+            <div class="quota-group-description">${escapeHtml(groupData.description)}</div>
+          </div>
         </div>
-        <div class="quota-model-info">
-          <span class="quota-percentage">${remaining}%</span>
+        <div class="quota-progress-bar">
+          <div class="quota-progress-fill ${colorClass}" style="width: ${remainingPercentage}%"></div>
+        </div>
+        <div class="quota-group-stats">
+          <span class="quota-percentage">${remainingPercentage}%</span>
           <span class="quota-reset-time">重置: ${resetTime}</span>
+          <span class="quota-model-count">${groupData.modelIds.length} 个模型</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // 渲染其他模型
+  if (otherModels.length > 0) {
+    html += `
+      <div class="quota-group-item quota-other-group">
+        <div class="quota-group-header">
+          <span class="quota-group-icon">📋</span>
+          <div class="quota-group-info">
+            <div class="quota-group-name">其他模型</div>
+            <div class="quota-group-description">未分组模型单独计费</div>
+          </div>
+        </div>
+        <div class="quota-other-models">
+    `;
+
+    otherModels.forEach(model => {
+      const remainingPercentage = Math.round(model.remaining * 100);
+      const colorClass = remainingPercentage > 50 ? 'quota-high' :
+                        remainingPercentage > 20 ? 'quota-medium' : 'quota-low';
+
+      html += `
+        <div class="quota-single-model">
+          <div class="quota-model-name">${escapeHtml(model.name)}</div>
+          <div class="quota-progress-bar">
+            <div class="quota-progress-fill ${colorClass}" style="width: ${remainingPercentage}%"></div>
+          </div>
+          <div class="quota-model-info">
+            <span class="quota-percentage">${remainingPercentage}%</span>
+            <span class="quota-reset-time">重置: ${model.resetTime}</span>
+          </div>
+        </div>
+      `;
+    });
+
+    html += `
         </div>
       </div>
     `;

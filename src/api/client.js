@@ -365,7 +365,7 @@ function parseAndEmitStreamChunk(line, state, callback) {
                     callback({ type: 'text', content: part.text });
                 } else if (part.functionCall) {
                     // 工具调用
-                    state.toolCalls.push(convertToToolCall(part.functionCall));
+                    state.toolCalls.push(convertToToolCallWithSignature(part.functionCall, part.thoughtSignature));
                 }
             }
         }
@@ -514,7 +514,7 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
         } else if (part.text !== undefined) {
             content += part.text;
         } else if (part.functionCall) {
-            toolCalls.push(convertToToolCall(part.functionCall));
+            toolCalls.push(convertToToolCallWithSignature(part.functionCall, part.thoughtSignature));
         } else if (part.inlineData) {
             // 保存图片到本地并获取 URL
             const imageUrl = saveBase64Image(part.inlineData.data, part.inlineData.mimeType);
