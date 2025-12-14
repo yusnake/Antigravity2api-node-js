@@ -1,0 +1,21 @@
+# 环境配置文件（不应打包进镜像）
+.env
+.env.*
+
+# 数据目录（通过 volume 挂载）
+data/
+
+# Git
+.git
+.gitignore
+
+# 开发文件
+node_modules
+npm-debug.log
+*.md
+.vscode
+.idea
+
+# 测试
+test/
+*.test.js
