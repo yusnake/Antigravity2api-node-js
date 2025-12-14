@@ -389,7 +389,7 @@ function flushTextAccumulator(state) {
     state.textAccumulator = { text: '', signature: null };
 }
 
-function parseAndEmitStreamChunk(line, state, callback) {
+async function parseAndEmitStreamChunk(line, state, callback) {
     if (!line.startsWith('data: ')) return;
 
     try {
@@ -419,8 +419,8 @@ function parseAndEmitStreamChunk(line, state, callback) {
                     // 工具调用
                     state.toolCalls.push(convertToToolCallWithSignature(part.functionCall, part.thoughtSignature));
                 } else if (part.inlineData) {
-                    // 图片数据
-                    const imageUrl = saveBase64Image(part.inlineData.data, part.inlineData.mimeType);
+                    // 图片数据（支持异步 R2 上传）
+                    const imageUrl = await saveBase64Image(part.inlineData.data, part.inlineData.mimeType);
                     callback({ type: 'image', url: imageUrl });
                 }
             }
@@ -447,12 +447,15 @@ export async function generateAssistantResponse(requestBody, token, callback) {
     let buffer = ''; // 缓冲区：处理跨 chunk 的不完整行
     let streamChunks = []; // 收集流式响应（用于 debug=high 日志）
 
-    const processChunk = (chunk) => {
+    const processChunk = async (chunk) => {
         buffer += chunk;
         streamChunks.push(chunk); // 收集响应片段
         const lines = buffer.split('\n');
         buffer = lines.pop(); // 保留最后一行（可能不完整）
-        lines.forEach(line => parseAndEmitStreamChunk(line, state, callback));
+        // 使用 for...of 替代 forEach 以正确等待异步操作（R2 上传）
+        for (const line of lines) {
+            await parseAndEmitStreamChunk(line, state, callback);
+        }
     };
 
     // 记录后端请求
@@ -469,14 +472,24 @@ export async function generateAssistantResponse(requestBody, token, callback) {
         await withRequesterFallback(async currentUseAxios => withRetry(async (currentToken) => {
             const headers = buildHeaders(currentToken);
             buffer = ''; // 重置缓冲区以防重试
+            const chunkPromises = []; // 收集异步处理的 Promise（用于 R2 上传等待）
 
             if (currentUseAxios) {
                 const axiosConfig = { ...buildAxiosConfig(config.api.url, headers, requestBody), responseType: 'stream' };
                 const response = await axios(axiosConfig);
 
-                response.data.on('data', chunk => processChunk(chunk.toString()));
+                response.data.on('data', chunk => {
+                    chunkPromises.push(processChunk(chunk.toString()));
+                });
                 await new Promise((resolve, reject) => {
-                    response.data.on('end', resolve);
+                    response.data.on('end', async () => {
+                        try {
+                            await Promise.all(chunkPromises);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
                     response.data.on('error', reject);
                 });
                 return;
@@ -489,8 +502,25 @@ export async function generateAssistantResponse(requestBody, token, callback) {
             await new Promise((resolve, reject) => {
                 streamResponse
                     .onStart(({ status }) => { statusCode = status; })
-                    .onData((chunk) => statusCode !== 200 ? errorBody += chunk : processChunk(chunk))
-                    .onEnd(() => statusCode !== 200 ? reject({ status: statusCode, message: errorBody }) : resolve())
+                    .onData((chunk) => {
+                        if (statusCode !== 200) {
+                            errorBody += chunk;
+                        } else {
+                            chunkPromises.push(processChunk(chunk));
+                        }
+                    })
+                    .onEnd(async () => {
+                        if (statusCode !== 200) {
+                            reject({ status: statusCode, message: errorBody });
+                        } else {
+                            try {
+                                await Promise.all(chunkPromises);
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        }
+                    })
                     .onError(reject);
             });
         }, token));
@@ -683,8 +713,8 @@ export async function generateAssistantResponseNoStream(requestBody, token) {
         } else if (part.functionCall) {
             toolCalls.push(convertToToolCallWithSignature(part.functionCall, part.thoughtSignature));
         } else if (part.inlineData) {
-            // 保存图片到本地并获取 URL
-            const imageUrl = saveBase64Image(part.inlineData.data, part.inlineData.mimeType);
+            // 保存图片并获取 URL（支持异步 R2 上传）
+            const imageUrl = await saveBase64Image(part.inlineData.data, part.inlineData.mimeType);
             imageUrls.push(imageUrl);
         }
     }

@@ -1,240 +1,409 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-
+<html lang="zh-CN" class="light">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Antigravity OAuth 管理</title>
   <script>
-    try {
+    // 优先加载主题避免闪烁
+    (function() {
       const saved = localStorage.getItem('ag-panel-theme');
-      if (saved) document.documentElement.setAttribute('data-theme', saved);
-    } catch (e) { }
+      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      }
+    })();
   </script>
-  <link rel="stylesheet" href="/admin/panel.css" />
-  <script src="/admin/theme.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn {
+        @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+      }
+      .btn-primary {
+        @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 dark:bg-primary-500 dark:hover:bg-primary-600;
+      }
+      .btn-secondary {
+        @apply bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-400 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600;
+      }
+      .btn-danger {
+        @apply bg-red-50 text-red-600 hover:bg-red-100 focus:ring-red-400 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50;
+      }
+      .btn-sm {
+        @apply px-3 py-1.5 text-xs;
+      }
+      .input {
+        @apply w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all;
+      }
+      .card {
+        @apply bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700;
+      }
+      .badge {
+        @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
+      }
+      .badge-success {
+        @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
+      }
+      .badge-error {
+        @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+      }
+      .badge-info {
+        @apply bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400;
+      }
+      .badge-warning {
+        @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400;
+      }
+      .tab-btn {
+        @apply px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200;
+      }
+      .tab-btn.active {
+        @apply bg-primary-600 text-white dark:bg-primary-500;
+      }
+      .tab-btn:not(.active) {
+        @apply bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600;
+      }
+    }
+  </style>
 </head>
-
-<body>
-  <div class="container">
-    <header class="header">
-      <div>
-        <h1>Antigravity OAuth 管理</h1>
-        <p>登录后可以完成 Google 授权、刷新或删除凭证，并查看用量和调用日志。</p>
-      </div>
-      <div class="header-actions">
-        <button id="themeToggleBtn" class="refresh-btn" type="button">🌙 暗色模式</button>
-        <button id="logoutBtn" class="refresh-btn">退出登录</button>
+<body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+  <div class="max-w-5xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <header class="card p-5 mb-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 class="text-xl font-bold text-gray-900 dark:text-white">Antigravity OAuth 管理</h1>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">登录后可完成 Google 授权、刷新或删除凭证，并查看用量和调用日志。</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="themeToggleBtn" class="btn btn-secondary btn-sm">
+            <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+            <svg class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+            <span class="hidden sm:inline dark:hidden">暗色</span>
+            <span class="hidden dark:sm:inline">亮色</span>
+          </button>
+          <button id="logoutBtn" class="btn btn-secondary btn-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+            <span class="hidden sm:inline">退出</span>
+          </button>
+        </div>
       </div>
     </header>
 
-    <div class="tabs">
+    <!-- Tabs -->
+    <div class="flex flex-wrap gap-2 mb-4">
       <button class="tab-btn active" data-tab-target="auth">授权</button>
       <button class="tab-btn" data-tab-target="import">导入</button>
-      <button class="tab-btn" data-tab-target="manage">管理凭证</button>
-      <button class="tab-btn" data-tab-target="usage">凭证用量</button>
+      <button class="tab-btn" data-tab-target="manage">凭证管理</button>
+      <button class="tab-btn" data-tab-target="usage">用量统计</button>
       <button class="tab-btn" data-tab-target="logs">调用日志</button>
       <button class="tab-btn" data-tab-target="settings">系统设置</button>
       <button class="tab-btn" data-tab-target="api-docs">API 文档</button>
-      <button class="tab-btn" data-tab-target="project">项目介绍</button>
+      <button class="tab-btn" data-tab-target="project">关于</button>
     </div>
 
+    <!-- Tab: 授权 -->
     <section class="card tab-panel active" data-tab="auth">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">步骤 1</div>
-          <h2>获取授权链接</h2>
-          <p>点击获取授权链接，在新窗口完成 Google 登录。</p>
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">步骤 1</span>
+            <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">获取授权链接</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">点击获取授权链接，在新窗口完成 Google 登录。</p>
+          </div>
+          <button id="loginBtn" class="btn btn-primary whitespace-nowrap">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            获取授权 URL
+          </button>
         </div>
-        <button id="loginBtn">➕ 获取授权 URL</button>
       </div>
-      <div class="card-body">
-        <p>授权完成后，请复制回调页面地址栏中的完整 URL，粘贴到输入框并提交以完成添加或重新授权。</p>
-        <input id="callbackUrlInput" type="text" placeholder="将回调后浏览器真实的完整 URL 粘贴到这里" class="input" />
-        <div class="project-id-section">
-          <label class="project-id-label">
-            <span>自定义项目 ID（可选）</span>
-            <input id="customProjectIdInput" type="text" placeholder="输入自定义项目ID，留空则自动获取" class="input" />
+      <div class="p-5 space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400">授权完成后，请复制回调页面地址栏中的完整 URL，粘贴到输入框并提交。</p>
+        <input id="callbackUrlInput" type="text" placeholder="将回调后浏览器的完整 URL 粘贴到这里" class="input" />
+
+        <div class="space-y-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">自定义项目 ID（可选）</label>
+          <input id="customProjectIdInput" type="text" placeholder="输入自定义项目ID，留空则自动获取" class="input font-mono text-sm" />
+        </div>
+
+        <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+          <input type="checkbox" id="allowRandomProjectId" class="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <span>无法获取项目 ID 时使用随机 projectId（可能导致 403）</span>
+        </label>
+
+        <div class="flex items-center gap-3">
+          <button id="submitCallbackBtn" class="btn btn-primary">提交回调 URL</button>
+          <span id="status" class="badge hidden"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab: 导入 -->
+    <section class="card tab-panel hidden" data-tab="import">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">批量操作</span>
+            <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">批量导入凭证（TOML）</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">支持一次性导入多个凭证，格式与 <code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">accounts</code> 数组表一致。</p>
+          </div>
+          <button id="importTomlBtn" class="btn btn-primary whitespace-nowrap">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            导入 TOML
+          </button>
+        </div>
+      </div>
+      <div class="p-5 space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400">将包含 <code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">[[accounts]]</code> 的 TOML 内容粘贴到下方。</p>
+        <textarea id="tomlInput" rows="6" class="input font-mono text-xs resize-y" placeholder="[[accounts]]
+access_token = &quot;...&quot;
+refresh_token=&quot;...&quot;
+created_at=&quot;2025-11-26 08:46:35&quot;
+..."></textarea>
+
+        <div class="flex flex-col sm:flex-row gap-4">
+          <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+            <input type="checkbox" id="replaceExisting" class="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            <span>覆盖已存在的账号</span>
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+            <input type="checkbox" id="filterDisabled" checked class="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            <span>仅导入启用的凭证</span>
           </label>
         </div>
-        <label class="checkbox-row">
-          <input type="checkbox" id="allowRandomProjectId" />
-          <span>无法自动获取 Google 项目 ID 时，使用随机 projectId（可能导致 403 错误）！</span>
-        </label>
-        <div class="inline-row">
-          <button id="submitCallbackBtn" class="refresh-btn">提交回调 URL 并交换凭证</button>
-          <span id="status" class="badge" style="display:none;"></span>
-        </div>
+
+        <span id="tomlStatus" class="badge hidden"></span>
       </div>
     </section>
 
-    <section class="card tab-panel" data-tab="import">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">步骤 1.5</div>
-          <h2>批量导入凭证（TOML）</h2>
-          <p>支持一次性导入多个凭证，格式与 <code>accounts</code> 数组表一致。</p>
-        </div>
-        <button id="importTomlBtn">📥 导入 TOML</button>
-      </div>
-      <div class="card-body">
-        <p>将包含 <code>[[accounts]]</code> 的 TOML 内容粘贴到下方，必要时勾选覆盖现有凭证。</p>
-        <textarea id="tomlInput" class="textarea" rows="8" placeholder="[[accounts]]\naccess_token = \"
-          ...\"\nrefresh_token=\"...\"\ncreated_at=\"2025-11-26 08:46:35\"\n..."></textarea>
-        <label class="checkbox-row">
-          <input type="checkbox" id="replaceExisting" />
-          <span>覆盖已存在的账号（勾选后将只保留本次导入的账号）</span>
-        </label>
-        <label class="checkbox-row">
-          <input type="checkbox" id="filterDisabled" checked />
-          <span>仅导入启用的凭证（跳过 disabled = false 的账号）</span>
-        </label>
-        <div class="inline-row">
-          <span id="tomlStatus" class="badge" style="display:none;"></span>
-        </div>
-      </div>
-    </section>
-
-    <section class="card tab-panel" data-tab="manage">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">步骤 2</div>
-          <h2>管理凭证</h2>
-          <p>刷新、停用、删除或重新授权已保存的账户。</p>
-        </div>
-        <div class="card-actions">
-          <div class="action-group">
-            <button id="refreshAllBtn" class="refresh-btn">🔁 批量刷新</button>
-            <button id="deleteDisabledBtn" class="danger-btn">🗑️ 删除停用凭证</button>
-          </div>
-          <button id="refreshBtn" class="refresh-btn">刷新列表</button>
-        </div>
-      </div>
-      <div class="filter-row">
-        <label class="filter-field">
-          <span>状态筛选</span>
-          <select id="statusFilter" class="input select">
-            <option value="all">全部</option>
-            <option value="enabled">仅启用</option>
-            <option value="disabled">仅停用</option>
-          </select>
-        </label>
-        <label class="filter-field checkbox-row">
-          <input type="checkbox" id="errorFilter" />
-          <span>仅显示有报错的凭证</span>
-        </label>
-      </div>
-      <div class="status-row">
-        <span id="manageStatus" class="badge" style="display:none;"></span>
-      </div>
-      <div class="pagination-bar">
-        <div id="paginationInfo" class="pagination-info">加载中...</div>
-        <div class="pagination-controls">
-          <button id="prevPageBtn" class="mini-btn">上一页</button>
-          <button id="nextPageBtn" class="mini-btn">下一页</button>
-        </div>
-      </div>
-      <div id="accountsList" class="accounts-list">加载中...</div>
-    </section>
-
-    <section class="card tab-panel" data-tab="usage">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">步骤 3</div>
-          <h2>凭证用量</h2>
-          <p>只显示有调用记录的凭证，按最近使用排序，并展示最近一小时的限额进度及累计调用数据。</p>
-        </div>
-        <button id="usageRefreshBtn" class="refresh-btn">🔄 刷新用量</button>
-      </div>
-      <div class="status-row">
-        <span id="usageStatus" class="badge" style="display:none;"></span>
-      </div>
-      <div class="log-usage-card">
-        <div class="log-usage-head">
+    <!-- Tab: 凭证管理 -->
+    <section class="card tab-panel hidden" data-tab="manage">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <div class="eyebrow">每小时用量</div>
-            <h3>默认凭证 20 次 / 小时 限额，可以前往设置修改</h3>
-            <p>按浏览器时区计算当前小时的调用占比。</p>
+            <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">步骤 2</span>
+            <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">管理凭证</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">刷新、停用、删除或重新授权已保存的账户。</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="refreshAllBtn" class="btn btn-secondary btn-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              批量刷新
+            </button>
+            <button id="deleteDisabledBtn" class="btn btn-danger btn-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              删除停用
+            </button>
+            <button id="refreshBtn" class="btn btn-secondary btn-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              刷新列表
+            </button>
           </div>
         </div>
-        <div id="hourlyUsage" class="log-usage-list">加载中...</div>
+      </div>
+
+      <!-- 筛选器 -->
+      <div class="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex flex-wrap items-center gap-4">
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">状态</label>
+            <select id="statusFilter" class="input py-1.5 w-auto min-w-[100px]">
+              <option value="all">全部</option>
+              <option value="enabled">仅启用</option>
+              <option value="disabled">仅停用</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">每页</label>
+            <select id="pageSizeSelect" class="input py-1.5 w-auto min-w-[80px]">
+              <option value="5">5 条</option>
+              <option value="10">10 条</option>
+              <option value="20">20 条</option>
+              <option value="50">50 条</option>
+              <option value="100">100 条</option>
+            </select>
+          </div>
+          <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+            <input type="checkbox" id="errorFilter" class="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            <span>仅显示有报错</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="px-5 py-2">
+        <span id="manageStatus" class="badge hidden"></span>
+      </div>
+
+      <!-- 分页 -->
+      <div class="px-5 py-3 flex items-center justify-between border-b border-gray-100 dark:border-gray-700">
+        <span id="paginationInfo" class="text-sm text-gray-500 dark:text-gray-400">加载中...</span>
+        <div class="flex gap-2">
+          <button id="prevPageBtn" class="btn btn-secondary btn-sm">上一页</button>
+          <button id="nextPageBtn" class="btn btn-secondary btn-sm">下一页</button>
+        </div>
+      </div>
+
+      <div id="accountsList" class="p-5 space-y-3">
+        <div class="text-center py-8 text-gray-500 dark:text-gray-400">加载中...</div>
       </div>
     </section>
 
-    <section class="card tab-panel" data-tab="logs">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">调用追踪</div>
-          <h2>调用日志</h2>
-          <p>精确到秒，记录使用的模型以及调用结果。</p>
-        </div>
-        <div class="card-actions">
-          <button id="logsRefreshBtn" class="refresh-btn">🔄 刷新日志</button>
-          <button id="logsClearBtn" class="refresh-btn">🗑 清空日志</button>
+    <!-- Tab: 用量统计 -->
+    <section class="card tab-panel hidden" data-tab="usage">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">统计</span>
+            <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">凭证用量</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">只显示有调用记录的凭证，按最近使用排序。</p>
+          </div>
+          <button id="usageRefreshBtn" class="btn btn-secondary btn-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            刷新用量
+          </button>
         </div>
       </div>
-      <div class="logs-body">
-        <div class="pagination-bar logs-pagination">
-          <div id="logPaginationInfo" class="pagination-info">加载中...</div>
-          <div class="pagination-controls">
-            <button id="logPrevPageBtn" class="mini-btn">上一页</button>
-            <button id="logNextPageBtn" class="mini-btn">下一页</button>
+      <div class="px-5 py-2">
+        <span id="usageStatus" class="badge hidden"></span>
+      </div>
+      <div class="p-5">
+        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <div class="mb-4">
+            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">每小时用量</span>
+            <h3 class="mt-1 text-base font-medium text-gray-900 dark:text-white">默认凭证 20 次 / 小时限额</h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">可在系统设置中修改限额。</p>
+          </div>
+          <div id="hourlyUsage" class="space-y-3">
+            <div class="text-center py-4 text-gray-500 dark:text-gray-400">加载中...</div>
           </div>
         </div>
-        <div id="logs" class="logs">加载中...</div>
       </div>
     </section>
 
-    <section class="card tab-panel" data-tab="settings">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">环境变量</div>
-          <h2>当前配置</h2>
-          <p>查看面板、网络、生成参数和限额配置，敏感信息会自动加密展示。</p>
-        </div>
-        <div class="card-actions">
-          <button id="settingsRefreshBtn" class="refresh-btn">🔄 刷新配置</button>
+    <!-- Tab: 调用日志 -->
+    <section class="card tab-panel hidden" data-tab="logs">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">追踪</span>
+            <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">调用日志</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">记录使用的模型以及调用结果。</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="logsRefreshBtn" class="btn btn-secondary btn-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              刷新日志
+            </button>
+            <button id="logsClearBtn" class="btn btn-danger btn-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              清空日志
+            </button>
+          </div>
         </div>
       </div>
-      <div class="status-row">
-        <span id="settingsStatus" class="badge" style="display:none;"></span>
+
+      <!-- 分页 -->
+      <div class="px-5 py-3 flex items-center justify-between border-b border-gray-100 dark:border-gray-700">
+        <span id="logPaginationInfo" class="text-sm text-gray-500 dark:text-gray-400">加载中...</span>
+        <div class="flex gap-2">
+          <button id="logPrevPageBtn" class="btn btn-secondary btn-sm">上一页</button>
+          <button id="logNextPageBtn" class="btn btn-secondary btn-sm">下一页</button>
+        </div>
       </div>
-      <div id="settingsGrid" class="settings-grid">加载中...</div>
+
+      <div id="logs" class="p-5 space-y-2">
+        <div class="text-center py-8 text-gray-500 dark:text-gray-400">加载中...</div>
+      </div>
     </section>
 
-    <section class="card tab-panel" data-tab="api-docs">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">API 参考</div>
-          <h2>查看全部接口与示例</h2>
-          <p>跳转到独立页面查看 API 端点、请求示例和返回格式，不与控制台页面混合。</p>
-        </div>
-        <div class="card-actions">
-          <a class="refresh-btn" href="/admin/api.html" target="_blank" rel="noopener">↗ 打开 API 文档</a>
+    <!-- Tab: 系统设置 -->
+    <section class="card tab-panel hidden" data-tab="settings">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">配置</span>
+            <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">当前配置</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">查看和修改面板、网络、生成参数等配置。</p>
+          </div>
+          <button id="settingsRefreshBtn" class="btn btn-secondary btn-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            刷新配置
+          </button>
         </div>
       </div>
-      <div class="card-body">
-        <p>新页面将列出所有可用 API，包括凭证清单、限额说明、OpenAI 兼容的聊天接口以及按凭证固定的免限额调用示例。</p>
+      <div class="px-5 py-2">
+        <span id="settingsStatus" class="badge hidden"></span>
+      </div>
+      <div id="settingsGrid" class="p-5 space-y-4">
+        <div class="text-center py-8 text-gray-500 dark:text-gray-400">加载中...</div>
       </div>
     </section>
 
-    <section class="card tab-panel" data-tab="project">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">关于项目</div>
-          <h2>项目介绍</h2>
+    <!-- Tab: API 文档 -->
+    <section class="card tab-panel hidden" data-tab="api-docs">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">参考</span>
+            <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">API 文档</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">查看 API 端点、请求示例和返回格式。</p>
+          </div>
+          <a class="btn btn-primary" href="/admin/api.html" target="_blank" rel="noopener">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+            打开 API 文档
+          </a>
         </div>
       </div>
-      <div class="card-body">
-        <div class="project-content">
-          <p>当前项目是基于<a href="https://github.com/liuw1535">liuw1535</a>大佬的<a
-              href="https://github.com/liuw1535/antigravity2api-nodejs">antigravity2api-nodejs</a>做的修改和迭代</p>
-          <p>二开项目QQ交流群： <a href="https://qm.qq.com/q/J0Ny6uYZCo">937931004</a></p>
+      <div class="p-5">
+        <p class="text-sm text-gray-600 dark:text-gray-400">新页面将列出所有可用 API，包括凭证清单、限额说明、OpenAI 兼容的聊天接口以及按凭证固定的免限额调用示例。</p>
+      </div>
+    </section>
+
+    <!-- Tab: 关于 -->
+    <section class="card tab-panel hidden" data-tab="project">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div>
+          <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">关于</span>
+          <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">项目介绍</h2>
+        </div>
+      </div>
+      <div class="p-5">
+        <div class="prose prose-sm dark:prose-invert max-w-none">
+          <p class="text-gray-600 dark:text-gray-400">
+            当前项目是基于 <a href="https://github.com/liuw1535" class="text-primary-600 dark:text-primary-400 hover:underline" target="_blank">liuw1535</a> 大佬的
+            <a href="https://github.com/liuw1535/antigravity2api-nodejs" class="text-primary-600 dark:text-primary-400 hover:underline" target="_blank">antigravity2api-nodejs</a> 做的修改和迭代。
+          </p>
+          <p class="text-gray-600 dark:text-gray-400 mt-3">
+            二开项目 QQ 交流群：<a href="https://qm.qq.com/q/J0Ny6uYZCo" class="text-primary-600 dark:text-primary-400 hover:underline font-mono" target="_blank">937931004</a>
+          </p>
         </div>
       </div>
     </section>
   </div>
 
+  <script src="/admin/theme.js"></script>
   <script src="/admin/panel.js"></script>
 </body>
-
 </html>

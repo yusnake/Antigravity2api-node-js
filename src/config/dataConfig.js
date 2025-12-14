@@ -30,13 +30,21 @@ const DEFAULT_DATA_CONFIG = {
   // 其他配置
   USE_NATIVE_AXIOS: false,
   TIMEOUT: 180000,
-  MAX_IMAGES: 10,
-  IMAGE_BASE_URL: '',
   CREDENTIAL_MAX_USAGE_PER_HOUR: 20,
   RETRY_STATUS_CODES: '429,500',
   RETRY_MAX_ATTEMPTS: 3,
   SYSTEM_INSTRUCTION: '',
-  PROXY: ''
+  PROXY: '',
+
+  // 图床配置
+  IMAGE_HOST: 'local',           // local | base64 | r2
+  MAX_IMAGES: 10,                // 仅 local 模式
+  IMAGE_BASE_URL: '',            // 仅 local 模式
+  R2_ACCESS_KEY_ID: '',          // 仅 r2 模式
+  R2_SECRET_ACCESS_KEY: '',      // 仅 r2 模式
+  R2_ENDPOINT: '',               // 仅 r2 模式
+  R2_BUCKET: '',                 // 仅 r2 模式
+  R2_PUBLIC_URL: ''              // 仅 r2 模式
 };
 
 // 环境变量优先级配置（这些只能在 Docker 环境变量中设置，不走 config.json）

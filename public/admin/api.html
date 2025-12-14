@@ -1,60 +1,133 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="light">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Antigravity API 文档</title>
   <script>
-    try {
+    (function() {
       const saved = localStorage.getItem('ag-panel-theme');
-      if (saved) document.documentElement.setAttribute('data-theme', saved);
-    } catch (e) {}
+      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      }
+    })();
   </script>
-  <link rel="stylesheet" href="/admin/panel.css" />
-  <script src="/admin/theme.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn {
+        @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+      }
+      .btn-primary {
+        @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 dark:bg-primary-500 dark:hover:bg-primary-600;
+      }
+      .btn-secondary {
+        @apply bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-400 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600;
+      }
+      .btn-sm {
+        @apply px-3 py-1.5 text-xs;
+      }
+      .card {
+        @apply bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700;
+      }
+      .code-block {
+        @apply bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto text-sm font-mono;
+      }
+    }
+  </style>
 </head>
-<body>
-  <div class="container">
-    <header class="header">
-      <div>
-        <h1>Antigravity API 文档</h1>
-        <p>以下接口均需在请求头中携带 <code>Authorization: Bearer $API_KEY</code>。</p>
-      </div>
-      <div class="header-actions">
-        <button id="apiThemeToggle" class="refresh-btn" type="button">🌙 切换为暗色</button>
-        <a class="refresh-btn" href="/admin/" rel="noopener">← 返回控制台</a>
+<body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+  <div class="max-w-4xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+    <!-- Header -->
+    <header class="card p-5 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 class="text-xl font-bold text-gray-900 dark:text-white">Antigravity API 文档</h1>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            所有接口均需在请求头中携带 <code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs font-mono">Authorization: Bearer $API_KEY</code>
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="apiThemeToggle" class="btn btn-secondary btn-sm">
+            <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+            <svg class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+          </button>
+          <a class="btn btn-secondary btn-sm" href="/admin/">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            返回控制台
+          </a>
+        </div>
       </div>
     </header>
 
-    <section class="card">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">认证</div>
-          <h2>API Key</h2>
-          <p>所有接口均使用环境变量 <code>API_KEY</code> 校验，未通过校验将返回 <code>401</code>。</p>
-        </div>
+    <!-- 认证说明 -->
+    <section class="card mb-4">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <span class="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide">认证</span>
+        <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">API Key</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">所有接口均使用环境变量 <code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs font-mono">API_KEY</code> 校验。</p>
       </div>
-      <div class="card-body">
-        <ul>
-          <li>请求头：<code>Authorization: Bearer &lt;API_KEY&gt;</code></li>
-          <li>Content-Type：对于 POST 请求请使用 <code>application/json</code></li>
+      <div class="p-5">
+        <ul class="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+          <li class="flex items-start gap-2">
+            <svg class="w-4 h-4 mt-0.5 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <span>请求头：<code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs font-mono">Authorization: Bearer &lt;API_KEY&gt;</code></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <svg class="w-4 h-4 mt-0.5 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <span>Content-Type：对于 POST 请求请使用 <code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs font-mono">application/json</code></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <svg class="w-4 h-4 mt-0.5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <span>未通过校验将返回 <code class="px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded text-xs font-mono">401 Unauthorized</code></span>
+          </li>
         </ul>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">凭证清单</div>
-          <h2>GET /v1/lits</h2>
-          <p>返回所有已启用的凭证名称（projectId）及当前小时用量与剩余额度。</p>
+    <!-- 凭证清单 -->
+    <section class="card mb-4">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold rounded">GET</span>
+          <code class="text-sm font-mono text-gray-900 dark:text-white">/v1/lits</code>
         </div>
+        <h2 class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">凭证清单</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">返回所有已启用的凭证名称及当前小时用量与剩余额度。</p>
       </div>
-      <div class="card-body">
-        <p><strong>请求示例</strong></p>
-        <pre><code>GET /v1/lits
+      <div class="p-5 space-y-4">
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">请求示例</h3>
+          <pre class="code-block"><code>GET /v1/lits
 Authorization: Bearer &lt;API_KEY&gt;</code></pre>
-        <p><strong>响应示例</strong></p>
-        <pre><code>{
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">响应示例</h3>
+          <pre class="code-block"><code>{
   "credentials": [
     {"name": "project-1", "used_per_hour": 3, "remaining_per_hour": 17},
     {"name": "project-2", "used_per_hour": 0, "remaining_per_hour": 20}
@@ -63,20 +136,24 @@ Authorization: Bearer &lt;API_KEY&gt;</code></pre>
   "limitPerCredential": 20,
   "updatedAt": "2025-01-01T00:00:00.000Z"
 }</code></pre>
+        </div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">OpenAI 兼容</div>
-          <h2>POST /v1/chat/completions</h2>
-          <p>与 OpenAI <code>/v1/chat/completions</code> 兼容，按系统配置的每小时限额自动轮换凭证。</p>
+    <!-- OpenAI 兼容接口 -->
+    <section class="card mb-4">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold rounded">POST</span>
+          <code class="text-sm font-mono text-gray-900 dark:text-white">/v1/chat/completions</code>
         </div>
+        <h2 class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">OpenAI 兼容接口</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">与 OpenAI <code class="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">/v1/chat/completions</code> 兼容，自动轮换凭证。</p>
       </div>
-      <div class="card-body">
-        <p><strong>请求示例</strong></p>
-        <pre><code>POST /v1/chat/completions
+      <div class="p-5 space-y-4">
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">请求示例</h3>
+          <pre class="code-block"><code>POST /v1/chat/completions
 Authorization: Bearer &lt;API_KEY&gt;
 Content-Type: application/json
 
@@ -87,24 +164,30 @@ Content-Type: application/json
     {"role": "user", "content": "你好"}
   ]
 }</code></pre>
-        <p><strong>响应示例（流式片段）</strong></p>
-        <pre><code>data: {"id":"chatcmpl-...","object":"chat.completion.chunk",...}
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">响应示例（流式片段）</h3>
+          <pre class="code-block"><code>data: {"id":"chatcmpl-...","object":"chat.completion.chunk",...}
 ...
 data: [DONE]</code></pre>
+        </div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card-header">
-        <div>
-          <div class="eyebrow">按凭证直连</div>
-          <h2>POST /{credential}/v1/chat/completions</h2>
-          <p>指定凭证（projectId）执行 OpenAI 规范聊天接口，不受每小时用量限制。</p>
+    <!-- 按凭证直连 -->
+    <section class="card mb-4">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold rounded">POST</span>
+          <code class="text-sm font-mono text-gray-900 dark:text-white">/{credential}/v1/chat/completions</code>
         </div>
+        <h2 class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">按凭证直连</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">指定凭证（projectId）执行聊天接口，不受每小时用量限制。</p>
       </div>
-      <div class="card-body">
-        <p><strong>请求示例</strong></p>
-        <pre><code>POST /project-1/v1/chat/completions
+      <div class="p-5 space-y-4">
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">请求示例</h3>
+          <pre class="code-block"><code>POST /project-1/v1/chat/completions
 Authorization: Bearer &lt;API_KEY&gt;
 Content-Type: application/json
 
@@ -114,8 +197,10 @@ Content-Type: application/json
     {"role": "user", "content": "使用指定凭证回复我"}
   ]
 }</code></pre>
-        <p><strong>响应示例（非流式）</strong></p>
-        <pre><code>{
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">响应示例（非流式）</h3>
+          <pre class="code-block"><code>{
   "id": "chatcmpl-...",
   "object": "chat.completion",
   "created": 1735689600,
@@ -123,15 +208,89 @@ Content-Type: application/json
   "choices": [
     {
       "index": 0,
-      "message": {"role": "assistant", "content": "好的，这是按指定凭证生成的回复。"},
+      "message": {
+        "role": "assistant",
+        "content": "好的，这是按指定凭证生成的回复。"
+      },
       "finish_reason": "stop"
     }
   ]
 }</code></pre>
-        <p>当凭证不可用或被停用时返回 <code>404</code>，不会计入轮询用量。</p>
+        </div>
+        <div class="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+          <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+          </svg>
+          <p class="text-sm text-amber-700 dark:text-amber-400">当凭证不可用或被停用时返回 <code class="px-1 py-0.5 bg-amber-100 dark:bg-amber-900/30 rounded text-xs font-mono">404</code>，不会计入轮询用量。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Claude 原生接口 -->
+    <section class="card mb-4">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold rounded">POST</span>
+          <code class="text-sm font-mono text-gray-900 dark:text-white">/v1/messages</code>
+        </div>
+        <h2 class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">Claude 原生接口</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">与 Anthropic Claude API 兼容，支持思维链和 Tool Use。</p>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">请求示例</h3>
+          <pre class="code-block"><code>POST /v1/messages
+Authorization: Bearer &lt;API_KEY&gt;
+Content-Type: application/json
+
+{
+  "model": "claude-sonnet-4-5",
+  "max_tokens": 1024,
+  "messages": [
+    {"role": "user", "content": "你好"}
+  ]
+}</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模型列表 -->
+    <section class="card mb-4">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold rounded">GET</span>
+          <code class="text-sm font-mono text-gray-900 dark:text-white">/v1/models</code>
+        </div>
+        <h2 class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">模型列表</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">返回当前可用的所有模型。</p>
+      </div>
+      <div class="p-5">
+        <div>
+          <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">请求示例</h3>
+          <pre class="code-block"><code>GET /v1/models
+Authorization: Bearer &lt;API_KEY&gt;</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 健康检查 -->
+    <section class="card">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-700">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold rounded">GET</span>
+          <code class="text-sm font-mono text-gray-900 dark:text-white">/healthz</code>
+        </div>
+        <h2 class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">健康检查</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">用于 Docker 健康检查，无需认证。</p>
+      </div>
+      <div class="p-5">
+        <pre class="code-block"><code>GET /healthz
+# 返回 200 OK</code></pre>
       </div>
     </section>
   </div>
+
+  <script src="/admin/theme.js"></script>
   <script>
     window.AgTheme?.bindThemeToggle?.(document.getElementById('apiThemeToggle'));
   </script>

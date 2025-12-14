@@ -90,6 +90,14 @@ function loadConfigFromEnv() {
     },
     imageBaseUrl: flat.IMAGE_BASE_URL || null,
     maxImages: parseInt(flat.MAX_IMAGES ?? 10, 10) || 10,
+    imageHost: (flat.IMAGE_HOST || 'local').toLowerCase(),
+    r2: {
+      accessKeyId: flat.R2_ACCESS_KEY_ID || null,
+      secretAccessKey: flat.R2_SECRET_ACCESS_KEY || null,
+      endpoint: flat.R2_ENDPOINT || null,
+      bucket: flat.R2_BUCKET || null,
+      publicUrl: flat.R2_PUBLIC_URL || null
+    },
     api: {
       url:
         flat.API_URL ||

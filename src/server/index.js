@@ -352,16 +352,68 @@ const SETTINGS_DEFINITIONS = [
   {
     key: 'MAX_IMAGES',
     label: '图片保存上限',
-    category: '限额与重试',
+    category: '图床配置',
     defaultValue: 10,
-    valueResolver: cfg => cfg.maxImages
+    valueResolver: cfg => cfg.maxImages,
+    description: '本地存储最大保留图片数（仅 local 模式有效）'
   },
   {
     key: 'IMAGE_BASE_URL',
     label: '图片访问基础 URL',
-    category: '限额与重试',
+    category: '图床配置',
     defaultValue: null,
-    valueResolver: cfg => cfg.imageBaseUrl
+    valueResolver: cfg => cfg.imageBaseUrl,
+    description: '本地图片访问基础 URL（仅 local 模式），留空使用本机 IP'
+  },
+  {
+    key: 'IMAGE_HOST',
+    label: '图床类型',
+    category: '图床配置',
+    defaultValue: 'local',
+    valueResolver: cfg => cfg.imageHost,
+    description: '图片存储方式：local 本地存储 | base64 直接返回 Data URI | r2 Cloudflare R2'
+  },
+  {
+    key: 'R2_ACCESS_KEY_ID',
+    label: 'R2 Access Key ID',
+    category: '图床配置',
+    defaultValue: null,
+    sensitive: true,
+    valueResolver: cfg => cfg.r2?.accessKeyId || null,
+    description: 'Cloudflare R2 访问密钥 ID'
+  },
+  {
+    key: 'R2_SECRET_ACCESS_KEY',
+    label: 'R2 Secret Access Key',
+    category: '图床配置',
+    defaultValue: null,
+    sensitive: true,
+    valueResolver: cfg => cfg.r2?.secretAccessKey || null,
+    description: 'Cloudflare R2 访问密钥'
+  },
+  {
+    key: 'R2_ENDPOINT',
+    label: 'R2 Endpoint',
+    category: '图床配置',
+    defaultValue: null,
+    valueResolver: cfg => cfg.r2?.endpoint || null,
+    description: 'Cloudflare R2 端点 URL'
+  },
+  {
+    key: 'R2_BUCKET',
+    label: 'R2 Bucket',
+    category: '图床配置',
+    defaultValue: null,
+    valueResolver: cfg => cfg.r2?.bucket || null,
+    description: 'Cloudflare R2 存储桶名称'
+  },
+  {
+    key: 'R2_PUBLIC_URL',
+    label: 'R2 公开访问 URL',
+    category: '图床配置',
+    defaultValue: null,
+    valueResolver: cfg => cfg.r2?.publicUrl || null,
+    description: 'R2 存储桶的公开访问域名'
   }
 ];
 
@@ -725,38 +777,79 @@ app.get('/admin/login', (req, res) => {
   }
 
   const html = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="light">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Antigravity 管理登录</title>
   <script>
-    try {
+    (function() {
       const saved = localStorage.getItem('ag-panel-theme');
-      if (saved) {
-        document.documentElement.setAttribute('data-theme', saved);
+      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
       }
-    } catch (e) {}
+    })();
   </script>
-  <link rel="stylesheet" href="/admin/auth.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' }
+          }
+        }
+      }
+    }
+  </script>
 </head>
-<body>
-  <div class="login-page">
-    <div class="login-card">
-      <h1>管理登录</h1>
-      <p>登录后即可进入控制台进行授权、查看用量和配置。</p>
-      <form class="login-form" method="POST" action="/admin/login">
-        <label>用户名
-          <input name="username" autocomplete="username" value="${config.panelUser || 'admin'}" />
-        </label>
-        <label>密码
-          <input type="password" name="password" autocomplete="current-password" />
-        </label>
-        <div class="login-actions">
-          <button type="submit">登录</button>
-          <button type="button" id="loginThemeToggle" class="refresh-btn login-toggle">🌙 切换为暗色</button>
+<body class="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <!-- Logo/Icon -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 bg-primary-600 dark:bg-primary-500 rounded-2xl shadow-lg mb-4">
+        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Antigravity</h1>
+      <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">登录管理控制台</p>
+    </div>
+
+    <!-- Login Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8">
+      <form method="POST" action="/admin/login" class="space-y-5">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">用户名</label>
+          <input name="username" autocomplete="username" value="${config.panelUser || 'admin'}"
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all" />
         </div>
-        <div class="login-hint">用户名由环境变量 PANEL_USER 配置，密码由环境变量 PANEL_PASSWORD 配置。</div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">密码</label>
+          <input type="password" name="password" autocomplete="current-password"
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all" />
+        </div>
+        <button type="submit"
+          class="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold rounded-xl shadow-lg shadow-primary-500/30 hover:shadow-primary-500/40 transition-all duration-200 flex items-center justify-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+          </svg>
+          登录控制台
+        </button>
       </form>
+
+      <div class="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+        <p class="text-xs text-gray-500 dark:text-gray-400">环境变量配置账号密码</p>
+        <button type="button" id="loginThemeToggle"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-all">
+          <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          <svg class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+          <span class="dark:hidden">暗色</span>
+          <span class="hidden dark:inline">亮色</span>
+        </button>
+      </div>
     </div>
   </div>
   <script src="/admin/theme.js"></script>
@@ -793,7 +886,62 @@ app.post('/admin/login', (req, res) => {
 
   return res
     .status(401)
-    .send('<h1>登录失败</h1><p>用户名或密码错误。</p><p><a href="/admin/login">返回重试</a></p>');
+    .send(`<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录失败 - Antigravity</title>
+  <script>
+    (function() {
+      const saved = localStorage.getItem('ag-panel-theme');
+      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      }
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-red-50 via-white to-red-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 bg-red-500 rounded-2xl shadow-lg mb-4">
+        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">登录失败</h1>
+      <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">用户名或密码错误</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8">
+      <div class="text-center space-y-4">
+        <div class="p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
+          <p class="text-sm text-red-600 dark:text-red-400">请检查您的用户名和密码是否正确，然后重新尝试登录。</p>
+        </div>
+        <a href="/admin/login" class="inline-flex items-center justify-center gap-2 w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold rounded-xl shadow-lg shadow-primary-500/30 hover:shadow-primary-500/40 transition-all duration-200">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
+          </svg>
+          返回登录页面
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`);
 });
 
 // Logout endpoint for admin panel
